@@ -9,6 +9,7 @@ import "./addons/Ellipse.js";
 import "./addons/RotateMarker.js";
 import "leaflet/dist/leaflet.css";
 import "../css/styles.css";
+import { SubmitSelection } from "./SubmitSelection.js";
 
 class SquaremapMap {
     /** @type {L.Map} */
@@ -29,6 +30,8 @@ class SquaremapMap {
     coordinates;
     /** @type {UILink} */
     uiLink;
+    /** @type {SubmitSelection} */
+    submitSelection;
     /** @type {number} */
     tick_count;
     /** @type {boolean} */
@@ -80,12 +83,14 @@ class SquaremapMap {
             /** @param {Settings} json */
             (json) => {
                 this.layerControl.init();
-
                 this.staticMode = json.static || false;
                 this.title = json.ui.title;
                 this.sidebar = new Sidebar(json.ui.sidebar, this.getUrlParam("show_sidebar", "true") === "true");
                 this.playerList = new PlayerList(json.ui.sidebar);
                 this.worldList = new WorldList(json.worlds);
+                if (this.getUrlParam("selection") == "true") {
+                    this.submitSelection = new SubmitSelection(window.location.hash);
+                }
                 this.coordinates = new UICoordinates(
                     json.ui.coordinates,
                     this.getUrlParam("show_coordinates", "true") === "true",
@@ -205,7 +210,7 @@ class SquaremapMap {
 export const S = new SquaremapMap();
 
 // https://stackoverflow.com/a/3955096
-Array.prototype.remove = function () {
+Array.prototype.remove = function() {
     var what,
         a = arguments,
         L = a.length,

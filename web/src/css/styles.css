@@ -61,6 +61,7 @@ div.leaflet-marker-pane img {
     transition: all 0.25s;
 }
 .leaflet-bottom.leaflet-left .link,
+.leaflet-bottom.leaflet-left .submit,
 .leaflet-bottom.leaflet-left .coordinates {
     display: inline-block;
     float: none;
@@ -80,6 +81,13 @@ div.leaflet-control-layers.coordinates {
     padding: 2px 5px;
     line-height: 14px;
     height: 30px;
+}
+div.leaflet-control-layers.submit {
+    vertical-align: bottom;
+    padding: 2px 5px;
+    line-height: 30px;
+    font-size: 25px;
+    cursor: pointer;
 }
 #sidebar {
     display: flex;

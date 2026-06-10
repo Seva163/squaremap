@@ -1,5 +1,6 @@
 import { Options, Rectangle, PolyLine, Polygon, Circle, Ellipse, Icon } from "./Markers.js";
 import { S } from "../Squaremap.js";
+import { Selection } from "./Selection.js";
 import L from "leaflet";
 
 class World {
@@ -21,6 +22,8 @@ class World {
     zoom;
     /** @type {WorldSettings_Spawn} */
     spawn;
+    /** @type {Selection} */
+    selection
 
     /**
      * @param json {Settings_World}
@@ -36,6 +39,9 @@ class World {
         this.marker_update_interval = 5;
         this.tiles_update_interval = 15;
         this.staticNeedsMarkerTick = false;
+        if (S.getUrlParam("selection") == "true") {
+            this.selection = new Selection();
+        }
     }
     tick() {
         // refresh map tile layer
@@ -63,6 +69,9 @@ class World {
         );
     }
     unload() {
+        if (this.selection) {
+            this.selection.unload();
+        }
         S.playerList.clearPlayerMarkers();
         const keys = Array.from(this.markerLayers.keys());
         for (let i = 0; i < keys.length; i++) {
@@ -76,6 +85,9 @@ class World {
      * @param callback {(world: World) => void}
      */
     load(callback) {
+        if (this.selection) {
+            this.selection.load();
+        }
         S.getJSON(
             `tiles/${this.name}/settings.json`,
             /** @param {WorldSettings} json */
