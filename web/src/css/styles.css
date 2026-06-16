@@ -32,6 +32,19 @@ img.leaflet-tile {
     gap: 0.125rem;
     flex-direction: column;
 }
+#selection-name {
+    text-align: center;
+    resize:none;
+    background: white;
+    padding: 5px;
+    border-radius: 3px;
+    border: 1px solid black;
+}
+div:has(#selection-name) {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
 div.leaflet-nameplate-pane > div {
     background: rgba(0, 0, 0, 0.5);
     color: #ffffff;

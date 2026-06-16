@@ -1,4 +1,4 @@
-import L from "leaflet";
+import L, { LatLng } from "leaflet";
 import { S } from "../Squaremap.js";
 
 class Selection {
@@ -6,18 +6,23 @@ class Selection {
     points;
     /** @type {L.Polygon} */
     polygon;
-    /** @type {LatLngWithCircle} */
-    selectedPoint;
+    /** @type {LatLngWithCircle | L.Marker | undefined} */
+    selectedObject;
     /** @type {boolean} */
     is_dragging;
     /** @type {L.Map} */
     map;
+    /** @type {L.Marker} */
+    nameInput
 
     constructor() {
         this.map = S.map;
         this.is_dragging = false;
         this.points = [];
         this.polygon = new L.Polygon([]);
+        document.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+        })
     }
 
     load() {
@@ -25,6 +30,37 @@ class Selection {
         this.map.on("mouseup", this.onMouseUp, this);
         this.map.on("mousemove", this.onMouseMove, this);
         this.polygon.addTo(this.map);
+        this.polygon.addEventListener("contextmenu", (event) => {
+            const divicon = L.divIcon({ html: '<textarea type="text" id="selection-name">' });
+            if (this.nameInput) {
+                this.nameInput.remove();
+            }
+            this.nameInput = L.marker(event.latlng, { icon: divicon });
+            this.nameInput.addEventListener("click", (event) => {
+                event.originalEvent.stopPropagation();
+            });
+            this.nameInput.addEventListener("mousedown", () => {
+                if (event.originalEvent.button === 1) {
+                    this.nameInput.remove();
+                    this.nameInput = undefined;
+                } else {
+                    this.map.dragging.disable();
+                    this.is_dragging = true;
+                    this.selectedObject = this.nameInput;
+                }
+            })
+            this.nameInput.addTo(this.map);
+            /** @type {HTMLTextAreaElement} */
+            let textarea = document.getElementById("selection-name");
+            this.nameInput._textarea = textarea;
+            //auto-resize textarea
+            textarea.addEventListener('input', () => {
+                textarea.style.height = "auto";
+                textarea.style.height = textarea.scrollHeight - 10 - 20 * !textarea.value.includes("\n") + 'px';
+            });
+            textarea.dispatchEvent(new Event("input"));
+            textarea.focus();
+        })
         for (const point of this.points) {
             point.circle.addTo(this.map);
         }
@@ -69,7 +105,7 @@ class Selection {
             } else {
                 this.map.dragging.disable();
                 this.is_dragging = true;
-                this.selectedPoint = point;
+                this.selectedObject = point;
             }
         })
         point.circle.addTo(this.map);
@@ -79,20 +115,25 @@ class Selection {
 
     onMouseUp() {
         this.map.dragging.enable();
-        this.selectedPoint = undefined;
+        this.selectedObject = undefined;
     }
 
     /**
      * @param {L.LeafletMouseEvent} event
      */
     onMouseMove(event) {
-        if (this.selectedPoint) {
-            this.selectedPoint.setLatLng(event.latlng);
+        if (this.selectedObject instanceof LatLngWithCircle) {
+            this.selectedObject.setLatLng(event.latlng);
             this.updatePolygon();
+        } else if (this.selectedObject) {
+            this.selectedObject.setLatLng(boundByPolygon(event.latlng, this.points));
         }
     }
 
     updatePolygon() {
+        if (this.nameInput) {
+            this.nameInput.setLatLng(boundByPolygon(this.nameInput.getLatLng(), this.points));
+        }
         this.polygon.setLatLngs([this.points]);
     }
 }
@@ -132,22 +173,72 @@ class LatLngWithCircle extends L.LatLng {
  * @param {L.LatLng} point
  * @param {L.LatLng} line_start
  * @param {L.LatLng} line_end
- * @returns number
+ * @returns {number}
  */
 function distance(point, line_start, line_end) {
-    let x = point.lat;
-    let y = point.lng;
-    let start_x = line_start.lat;
-    let start_y = line_start.lng;
-    let dx = line_end.lat - start_x;
-    let dy = line_end.lng - start_y;
+    const closest_point = findClosestPoint(point, line_start, line_end);
+    return Math.hypot(point.lat - closest_point.lat, point.lng - closest_point.lng);
+}
+/**
+ * @param {L.LatLng} point
+ * @param {L.LatLng} line_start
+ * @param {L.LatLng} line_end
+ * @returns {L.LatLng}
+ */
+function findClosestPoint(point, line_start, line_end) {
+    const { lat: x, lng: y } = point;
+    const { lat: start_x, lng: start_y } = line_start;
+    const dx = line_end.lat - start_x;
+    const dy = line_end.lng - start_y;
     if (dx === 0 && dy === 0) {
-        return Math.hypot(x - start_x, y - start_y)
+        return line_end;
     }
-    let t = Math.max(0, Math.min(1, ((x - start_x) * dx + (y - start_y) * dy) / (Math.pow(dx, 2) + Math.pow(dy, 2))));
-    let closest_x = start_x + t * dx;
-    let closest_y = start_y + t * dy;
-    return Math.hypot(x - closest_x, y - closest_y);
+    const t = Math.max(0, Math.min(1, ((x - start_x) * dx + (y - start_y) * dy) / (Math.pow(dx, 2) + Math.pow(dy, 2))));
+    const closest_x = start_x + t * dx;
+    const closest_y = start_y + t * dy;
+    return L.latLng(closest_x, closest_y);
+}
+/**
+ * @param {L.LatLng} point
+ * @param {L.LatLng[]} polygon
+ * @returns {L.LatLng}
+ */
+function boundByPolygon(point, polygon) {
+    if (isInPolygon(point, polygon)) {
+        return point;
+    } else {
+        let n = 0;
+        let min_dist = Number.MAX_VALUE;
+        for (let i = 0; i < polygon.length; i++) {
+            const dist = distance(point, polygon[i], polygon[(i + 1) % polygon.length]);
+            if (dist < min_dist) {
+                min_dist = dist;
+                n = i;
+            }
+        }
+        const closest_point = findClosestPoint(point, polygon[n], polygon[(n + 1) % polygon.length]);
+        return L.latLng(closest_point.lat, closest_point.lng);
+    }
+}
+
+/**
+ * @param {L.LatLng} point
+ * @param {L.LatLng[]} polygon
+ * @returns {boolean}
+ */
+function isInPolygon(point, polygon) {
+    const { lat: x, lng: y } = point;
+    let inside = false;
+    for (let i = 0; i < polygon.length; i++) {
+        const { lat: x1, lng: y1 } = polygon[i];
+        const { lat: x2, lng: y2 } = polygon[(i + 1) % polygon.length];
+        const intersect = ((y1 > y) !== (y2 > y)) &&
+            (x < (x2 - x1) * (y - y1) / (y2 - y1) + x1);
+        if (intersect) {
+            inside = !inside;
+        }
+    }
+    return inside;
 }
 
 export { Selection };
