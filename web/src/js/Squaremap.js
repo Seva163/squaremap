@@ -78,6 +78,13 @@ class SquaremapMap {
         this.worldList.curWorld.tick();
     }
     init() {
+        this.map.addEventListener("zoomanim", (event) => {
+            const elements = document.getElementsByClassName("consistent-scale");
+            const scale = Math.pow(2, event.zoom - 2);
+            for (const elem of elements) {
+                elem.style.transform = `scale(${scale})`
+            }
+        })
         this.getJSON(
             "tiles/settings.json",
             /** @param {Settings} json */

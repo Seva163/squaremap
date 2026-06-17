@@ -2,18 +2,22 @@ import L, { LatLng } from "leaflet";
 import { S } from "../Squaremap.js";
 
 class Selection {
+    /** @type {L.Map} */
+    map;
     /** @type {LatLngWithCircle[]} */
     points;
     /** @type {L.Polygon} */
     polygon;
-    /** @type {LatLngWithCircle | L.Marker | undefined} */
-    selectedObject;
-    /** @type {boolean} */
-    is_dragging;
-    /** @type {L.Map} */
-    map;
     /** @type {L.Marker} */
     nameInput
+    /** @type {boolean} */
+    is_dragging;
+    /** @type {LatLngWithCircle | L.Marker | undefined} */
+    selectedObject;
+    /** @type {number} */
+    mouseDownTimestamp
+    /** @type {L.LatLng} */
+    dragStartPosition
 
     constructor() {
         this.map = S.map;
@@ -26,19 +30,16 @@ class Selection {
     }
 
     load() {
-        this.map.on("click", this.onMapClick, this);
+        this.map.on("mousedown", this.onMouseDown, this);
         this.map.on("mouseup", this.onMouseUp, this);
         this.map.on("mousemove", this.onMouseMove, this);
         this.polygon.addTo(this.map);
         this.polygon.addEventListener("contextmenu", (event) => {
-            const divicon = L.divIcon({ html: '<textarea type="text" id="selection-name">' });
+            const divicon = L.divIcon({ html: '<textarea class="consistent-scale" type="text" spellcheck="false" id="selection-name">' });
             if (this.nameInput) {
                 this.nameInput.remove();
             }
             this.nameInput = L.marker(event.latlng, { icon: divicon });
-            this.nameInput.addEventListener("click", (event) => {
-                event.originalEvent.stopPropagation();
-            });
             this.nameInput.addEventListener("mousedown", () => {
                 if (event.originalEvent.button === 1) {
                     this.nameInput.remove();
@@ -52,12 +53,26 @@ class Selection {
             this.nameInput.addTo(this.map);
             /** @type {HTMLTextAreaElement} */
             let textarea = document.getElementById("selection-name");
+            const scale = Math.pow(2, this.map.getZoom() - 2);
+            textarea.style.transform = `scale(${scale})`
             this.nameInput._textarea = textarea;
             //auto-resize textarea
             textarea.addEventListener('input', () => {
+                // TODO: add width resize
+                // const font = window.getComputedStyle(textarea).font;
+                // const span = document.createElement("span");
+                // span.style.position = "absolute";
+                // span.style.font = font;
+                // span.style.whiteSpace = "pre";
+                // span.textContent = textarea.value.split("\n")[0];
+                // document.body.appendChild(span);
+                // const width = span.offsetWidth;
+                // document.body.removeChild(span);
+                // textarea.style.width = width + 20;
                 textarea.style.height = "auto";
-                textarea.style.height = textarea.scrollHeight - 10 - 20 * !textarea.value.includes("\n") + 'px';
+                textarea.style.height = textarea.scrollHeight - 20 * !textarea.value.includes("\n") + 'px';
             });
+            // invoke auto-resize
             textarea.dispatchEvent(new Event("input"));
             textarea.focus();
         })
@@ -67,7 +82,7 @@ class Selection {
     }
 
     unload() {
-        this.map.removeEventListener("click", this.onMapClick, this);
+        this.map.removeEventListener("mousedown", this.onMouseDown, this);
         this.map.removeEventListener("mouseup", this.onMouseUp, this);
         this.map.removeEventListener("mousemove", this.onMouseMove, this);
         this.polygon.removeFrom(this.map);
@@ -79,28 +94,61 @@ class Selection {
     /**
      * @param {L.LeafletMouseEvent} event
      */
-    onMapClick(event) {
+    onMouseDown(event) {
+        this.mouseDownTimestamp = event.originalEvent.timeStamp;
+        this.dragStartPosition = event.latlng;
+    }
+
+    /**
+     * @param {L.LeafletMouseEvent} event
+     */
+    onMouseUp(event) {
         if (this.is_dragging) {
             this.is_dragging = false;
+            this.map.dragging.enable();
+            this.selectedObject = undefined;
+        } else if (event.originalEvent.timeStamp - this.mouseDownTimestamp < 200 && event.originalEvent.button == 0) {
+            this.addPoint(event.latlng);
+        }
+    }
+
+    /**
+     * @param {L.LeafletMouseEvent} event
+     */
+    onMouseMove(event) {
+        if (event.originalEvent.timeStamp - this.mouseDownTimestamp < 200) {
             return;
         }
+        if (this.selectedObject instanceof LatLngWithCircle) {
+            this.selectedObject.setLatLng(event.latlng);
+            this.updatePolygon();
+        } else if (this.selectedObject) {
+            this.selectedObject.setLatLng(boundByPolygon(event.latlng, this.points));
+        }
+    }
+
+    /**
+     * @param {L.LatLng} latlng
+     */
+    addPoint(latlng) {
         let i = -1;
         let min_dist = Number.MAX_VALUE;
         // find closest edge
         for (let j = 0; j < this.points.length; j++) {
-            let dist = distance(event.latlng, this.points[j], this.points[(j + 1) % this.points.length]);
+            let dist = distance(latlng, this.points[j], this.points[(j + 1) % this.points.length]);
             if (dist < min_dist) {
                 min_dist = dist;
                 i = j;
             }
         }
-        let point = new LatLngWithCircle(event.latlng.lat, event.latlng.lng, event.latlng.alt)
-        // event for dragging and removing point
+        let point = new LatLngWithCircle(latlng.lat, latlng.lng);
+        this.points.splice(i + 1, 0, point);
+        point.circle.addTo(this.map);
+        // dragging and removing point
         point.circle.addEventListener("mousedown", (event) => {
             if (event.originalEvent.button === 1) {
-                const i = this.points.indexOf(point);
                 point.circle.removeFrom(this.map);
-                this.points.splice(i, 1);
+                this.points.splice(this.points.indexOf(point), 1);
                 this.updatePolygon();
             } else {
                 this.map.dragging.disable();
@@ -108,26 +156,7 @@ class Selection {
                 this.selectedObject = point;
             }
         })
-        point.circle.addTo(this.map);
-        this.points.splice(i + 1, 0, point);
         this.updatePolygon();
-    }
-
-    onMouseUp() {
-        this.map.dragging.enable();
-        this.selectedObject = undefined;
-    }
-
-    /**
-     * @param {L.LeafletMouseEvent} event
-     */
-    onMouseMove(event) {
-        if (this.selectedObject instanceof LatLngWithCircle) {
-            this.selectedObject.setLatLng(event.latlng);
-            this.updatePolygon();
-        } else if (this.selectedObject) {
-            this.selectedObject.setLatLng(boundByPolygon(event.latlng, this.points));
-        }
     }
 
     updatePolygon() {
@@ -145,10 +174,9 @@ class LatLngWithCircle extends L.LatLng {
     /**
      * @param {number} latitude
      * @param {number} longitude
-     * @param {number} altitude
      */
-    constructor(latitude, longitude, altitude) {
-        super(latitude, longitude, altitude);
+    constructor(latitude, longitude) {
+        super(latitude, longitude);
         this.circle = new L.CircleMarker(this, {
             radius: 6,
             fillColor: '#ff0000',

@@ -32,15 +32,21 @@ img.leaflet-tile {
     gap: 0.125rem;
     flex-direction: column;
 }
-#selection-name {
-    text-align: center;
-    resize:none;
-    background: white;
-    padding: 5px;
-    border-radius: 3px;
-    border: 1px solid black;
+.consistent-scale {
+    transition: inherit;
 }
-div:has(#selection-name) {
+#selection-name {
+    visibility: visible;
+    padding: 2px;
+    text-align: center;
+    font-size: 14px;
+    background-color: transparent;
+    outline: none;
+    resize:none;
+    border: none;
+}
+div:has(> #selection-name) {
+    visibility: hidden;
     display: flex;
     justify-content: center;
     align-items: center;

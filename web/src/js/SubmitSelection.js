@@ -14,13 +14,15 @@ class SubmitSelection {
         this.submit = new SubmitButton();
         S.map.addControl(this.submit);
         this.submit.button.innerHTML = "Submit selection";
+        this.submit.getContainer().addEventListener("mousedown", (event) => {
+            event.stopPropagation();
+        })
         this.submit.getContainer().addEventListener("click", (event) => {
             const selection = S.worldList.curWorld.selection;
             const points = [];
             for (const point of selection.points) {
                 points.push(S.toPoint(point));
             }
-            debugger;
             fetch("/api/submitSelection", {
                 method: "PUT",
                 body: JSON.stringify({
