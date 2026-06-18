@@ -232,7 +232,7 @@ class NameInput extends L.Marker {
                     span.textContent = line;
                     width = Math.max(width, Math.min(200, span.offsetWidth + 1))
                 }
-                textarea.style.width = width + "px";
+                textarea.style.minWidth = width + "px";
                 textarea.style.height = "auto";
                 textarea.style.height = textarea.scrollHeight + "px";
             });
