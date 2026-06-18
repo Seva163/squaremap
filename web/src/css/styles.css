@@ -35,21 +35,23 @@ img.leaflet-tile {
 .consistent-scale {
     transition: inherit;
 }
-#selection-name {
-    visibility: visible;
-    padding: 2px;
-    text-align: center;
-    font-size: 14px;
-    background-color: transparent;
-    outline: none;
-    resize:none;
-    border: none;
-}
-div:has(> #selection-name) {
+div:has(> .consistent-scale) {
     visibility: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
+}
+#selection-name {
+    visibility: visible;
+    padding: 0px;
+    text-align: center;
+    font-size: 8px;
+    line-height: 1;
+    scrollbar-width: none;
+    background-color: transparent;
+    outline: none;
+    resize: none;
+    border: none;
 }
 div.leaflet-nameplate-pane > div {
     background: rgba(0, 0, 0, 0.5);
@@ -80,6 +82,7 @@ div.leaflet-marker-pane img {
     transition: all 0.25s;
 }
 .leaflet-bottom.leaflet-left .link,
+.leaflet-bottom.leaflet-left .color-picker,
 .leaflet-bottom.leaflet-left .submit,
 .leaflet-bottom.leaflet-left .coordinates {
     display: inline-block;
@@ -107,6 +110,21 @@ div.leaflet-control-layers.submit {
     line-height: 30px;
     font-size: 25px;
     cursor: pointer;
+}
+.color-picker {
+    cursor: pointer;
+}
+div.color-picker {
+    justify-content: center;
+    align-items: center;
+}
+label.color-picker {
+    padding: 0px 0px 0px 5px;
+    font-size: 20px;
+}
+input.color-picker {
+    border: none;
+    background-color: transparent;
 }
 #sidebar {
     display: flex;

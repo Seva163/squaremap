@@ -1,5 +1,11 @@
-import L, { LatLng } from "leaflet";
+import L from "leaflet";
 import { S } from "../Squaremap.js";
+
+//span for text width mesurment
+const span = document.createElement("span");
+span.style.position = "absolute";
+span.style.whiteSpace = "pre";
+document.body.appendChild(span);
 
 class Selection {
     /** @type {L.Map} */
@@ -8,7 +14,7 @@ class Selection {
     points;
     /** @type {L.Polygon} */
     polygon;
-    /** @type {L.Marker} */
+    /** @type {NameInput} */
     nameInput
     /** @type {boolean} */
     is_dragging;
@@ -24,6 +30,30 @@ class Selection {
         this.is_dragging = false;
         this.points = [];
         this.polygon = new L.Polygon([]);
+        this.polygon.addEventListener("contextmenu", (event) => {
+            if (this.nameInput) {
+                this.nameInput.remove();
+            }
+            this.nameInput = new NameInput(event.latlng, this.map);
+            this.nameInput.addEventListener("mousedown", (event) => {
+                if (event.originalEvent.button !== 1) {
+                    this.map.dragging.disable();
+                    this.is_dragging = true;
+                    this.selectedObject = this.nameInput;
+                }
+            })
+            this.nameInput.addEventListener("mouseup", (event) => {
+                if (event.originalEvent.button == 1 && event.originalEvent.timeStamp - this.mouseDownTimestamp < 300) {
+                    // Firefox crashes if removed immediately
+                    const forRemoval = this.nameInput;
+                    this.nameInput = undefined;
+                    setTimeout(() => {
+                        forRemoval.remove();
+                    })
+                }
+            })
+            this.nameInput.addTo(this.map);
+        })
         document.addEventListener("contextmenu", (event) => {
             event.preventDefault();
         })
@@ -33,49 +63,11 @@ class Selection {
         this.map.on("mousedown", this.onMouseDown, this);
         this.map.on("mouseup", this.onMouseUp, this);
         this.map.on("mousemove", this.onMouseMove, this);
-        this.polygon.addTo(this.map);
-        this.polygon.addEventListener("contextmenu", (event) => {
-            const divicon = L.divIcon({ html: '<textarea class="consistent-scale" type="text" spellcheck="false" id="selection-name">' });
-            if (this.nameInput) {
-                this.nameInput.remove();
-            }
-            this.nameInput = L.marker(event.latlng, { icon: divicon });
-            this.nameInput.addEventListener("mousedown", () => {
-                if (event.originalEvent.button === 1) {
-                    this.nameInput.remove();
-                    this.nameInput = undefined;
-                } else {
-                    this.map.dragging.disable();
-                    this.is_dragging = true;
-                    this.selectedObject = this.nameInput;
-                }
-            })
+        if (this.nameInput) {
             this.nameInput.addTo(this.map);
-            /** @type {HTMLTextAreaElement} */
-            let textarea = document.getElementById("selection-name");
-            const scale = Math.pow(2, this.map.getZoom() - 2);
-            textarea.style.transform = `scale(${scale})`
-            this.nameInput._textarea = textarea;
-            //auto-resize textarea
-            textarea.addEventListener('input', () => {
-                // TODO: add width resize
-                // const font = window.getComputedStyle(textarea).font;
-                // const span = document.createElement("span");
-                // span.style.position = "absolute";
-                // span.style.font = font;
-                // span.style.whiteSpace = "pre";
-                // span.textContent = textarea.value.split("\n")[0];
-                // document.body.appendChild(span);
-                // const width = span.offsetWidth;
-                // document.body.removeChild(span);
-                // textarea.style.width = width + 20;
-                textarea.style.height = "auto";
-                textarea.style.height = textarea.scrollHeight - 20 * !textarea.value.includes("\n") + 'px';
-            });
-            // invoke auto-resize
-            textarea.dispatchEvent(new Event("input"));
-            textarea.focus();
-        })
+        }
+        S.selectionControl.colorPicker.input.value = this.polygon.options.color;
+        this.polygon.addTo(this.map);
         for (const point of this.points) {
             point.circle.addTo(this.map);
         }
@@ -85,6 +77,9 @@ class Selection {
         this.map.removeEventListener("mousedown", this.onMouseDown, this);
         this.map.removeEventListener("mouseup", this.onMouseUp, this);
         this.map.removeEventListener("mousemove", this.onMouseMove, this);
+        if (this.nameInput) {
+            this.nameInput.removeFrom(this.map);
+        }
         this.polygon.removeFrom(this.map);
         for (const point of this.points) {
             point.circle.removeFrom(this.map);
@@ -144,19 +139,29 @@ class Selection {
         let point = new LatLngWithCircle(latlng.lat, latlng.lng);
         this.points.splice(i + 1, 0, point);
         point.circle.addTo(this.map);
-        // dragging and removing point
+        // dragging point
         point.circle.addEventListener("mousedown", (event) => {
-            if (event.originalEvent.button === 1) {
-                point.circle.removeFrom(this.map);
-                this.points.splice(this.points.indexOf(point), 1);
-                this.updatePolygon();
-            } else {
+            if (event.originalEvent.button !== 1) {
                 this.map.dragging.disable();
                 this.is_dragging = true;
                 this.selectedObject = point;
             }
         })
+        point.circle.addEventListener("mouseup", (event) => {
+            if (event.originalEvent.button === 1 && event.originalEvent.timeStamp - this.mouseDownTimestamp < 300) {
+                point.circle.removeFrom(this.map);
+                this.points.splice(this.points.indexOf(point), 1);
+                this.updatePolygon();
+            }
+        })
         this.updatePolygon();
+    }
+
+    /**
+     * @param {string} color
+     */
+    setColor(color) {
+        this.polygon.setStyle({ color });
     }
 
     updatePolygon() {
@@ -194,6 +199,56 @@ class LatLngWithCircle extends L.LatLng {
         super.lat = latlng.lat;
         super.lng = latlng.lng;
         this.circle.setLatLng(this);
+    }
+}
+
+class NameInput extends L.Marker {
+    /** @type {HTMLTextAreaElement} */
+    textarea;
+    /** @type {boolean} */
+    firstAddEvent;
+
+    /**
+     * @param {L.LatLng} latlng
+     * @param {L.Map} map
+     */
+    constructor(latlng, map) {
+        super(latlng);
+        const div = L.DomUtil.create("div");
+        const textarea = L.DomUtil.create("textarea", "consistent-scale", div);
+        textarea.setAttribute("type", "text");
+        textarea.setAttribute("spellcheck", "false");
+        textarea.setAttribute("id", "selection-name");
+        super.setIcon(L.divIcon({ html: textarea }));
+        this.firstAddEvent = true;
+        this.addEventListener("add", () => {
+            const scale = Math.pow(2, map.getZoom() - 2);
+            textarea.style.transform = `scale(${scale})`
+            //auto-resize textarea
+            textarea.addEventListener('input', () => {
+                span.style.font = window.getComputedStyle(textarea).font;
+                let width = 0;
+                for (const line of textarea.value.split("\n")) {
+                    span.textContent = line;
+                    width = Math.max(width, Math.min(200, span.offsetWidth + 1))
+                }
+                textarea.style.width = width + "px";
+                textarea.style.height = "auto";
+                textarea.style.height = textarea.scrollHeight + "px";
+            });
+            // invoke auto-resize
+            textarea.dispatchEvent(new Event("input"));
+            if (this.firstAddEvent) {
+                this.firstAddEvent = false;
+                textarea.focus();
+            }
+        })
+        textarea.addEventListener("focusout", () => {
+            if (textarea.value.trim().length == 0) {
+                this.remove();
+            }
+        })
+        this.textarea = textarea;
     }
 }
 
